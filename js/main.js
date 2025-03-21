@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // Configuration
   const config = {
     IS_DEV:
       window.location.hostname === 'localhost' ||
@@ -13,10 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
         ? `${wsProtocol}//localhost/ws`
         : `${wsProtocol}//api.swecc.org/ws`
     },
-    STORAGE_KEY: 'retro_chat_data'
+    STORAGE_KEY: 'swecc_rooms_data',
+    MSG_HISTORY_LIMIT: 100,
+    MESSAGE_SOUND: false
   }
 
-  // State
   const state = {
     isAuthenticated: false,
     loading: false,
@@ -27,10 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
     webSocket: null,
     messages: {},
     csrfToken: '',
-    isConnected: false
+    isConnected: false,
+    messageCount: 0,
+    typing: {}
   }
 
-  // DOM Elements
   const elements = {
     authView: document.getElementById('auth-view'),
     loadingView: document.getElementById('loading-view'),
@@ -50,10 +51,10 @@ document.addEventListener('DOMContentLoaded', () => {
     leaveRoomBtn: document.getElementById('leave-room-btn'),
     currentUser: document.getElementById('current-user'),
     connectionIndicator: document.getElementById('connection-indicator'),
-    connectionStatus: document.getElementById('connection-status')
+    connectionStatus: document.getElementById('connection-status'),
+    connectionStatusText: document.getElementById('connection-status-text')
   }
 
-  // Load state from localStorage
   function loadFromStorage () {
     try {
       const savedData = localStorage.getItem(config.STORAGE_KEY)
@@ -64,6 +65,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (parsedData.messages) {
           state.messages = parsedData.messages
+        }
+        if (parsedData.messageCount) {
+          state.messageCount = parsedData.messageCount
         }
         console.log(
           'Loaded from localStorage:',
@@ -76,12 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Save state to localStorage
   function saveToStorage () {
     try {
       const dataToSave = {
         knownRooms: state.knownRooms,
-        messages: state.messages
+        messages: state.messages,
+        messageCount: state.messageCount
       }
       localStorage.setItem(config.STORAGE_KEY, JSON.stringify(dataToSave))
     } catch (error) {
@@ -89,7 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Helper Functions
   function showLoading (isLoading = true) {
     state.loading = isLoading
     updateUI()
@@ -112,9 +115,63 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.connectionStatus.textContent = isConnected
       ? 'Connected'
       : 'Offline'
+    elements.connectionStatusText.textContent = isConnected
+      ? 'Online'
+      : 'Offline'
+
+    if (isConnected) {
+      showToast(
+        'Connection Status',
+        'Connected to SWECC Rooms successfully!',
+        'success'
+      )
+    } else {
+      showToast('Connection Status', 'Disconnected from SWECC Rooms.', 'error')
+    }
   }
 
-  // API Service
+  function showToast (title, message, type = 'info') {
+    const existingToasts = document.querySelectorAll('.toast')
+    existingToasts.forEach(toast => {
+      toast.remove()
+    })
+
+    const toast = document.createElement('div')
+    toast.className = 'toast'
+    toast.style.borderLeftColor =
+      type === 'success'
+        ? 'var(--success)'
+        : type === 'error'
+        ? 'var(--error)'
+        : 'var(--primary)'
+
+    toast.innerHTML = `
+      <div class="toast-header">
+        <span class="toast-title">${title}</span>
+        <button class="toast-close">&times;</button>
+      </div>
+      <div class="toast-body">${message}</div>
+    `
+
+    document.body.appendChild(toast)
+
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+      toast.remove()
+    })
+
+    setTimeout(() => {
+      if (document.body.contains(toast)) {
+        toast.style.opacity = '0'
+        toast.style.transform = 'translateX(100%)'
+        setTimeout(() => {
+          if (document.body.contains(toast)) {
+            toast.remove()
+          }
+        }, 300)
+      }
+    }, 5000)
+  }
+
   const api = {
     async getCsrfToken () {
       try {
@@ -203,7 +260,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Auth Functions
   const auth = {
     async initialize () {
       try {
@@ -253,18 +309,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async login (username, password) {
       try {
-        // First get CSRF token
         await api.getCsrfToken()
 
-        // Then attempt login
         const res = await api.post('/auth/login/', { username, password })
 
         if (res.status === 200) {
-          // Refresh CSRF token after login
           await api.getCsrfToken()
           state.isAuthenticated = true
           state.error = null
           await this.fetchUserData()
+
+          showToast(
+            'Welcome',
+            `You've successfully logged in as ${username}!`,
+            'success'
+          )
+
           return true
         }
       } catch (err) {
@@ -279,12 +339,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await api.withCsrf(() => api.post('/auth/logout/'))
 
         if (res.status === 200) {
-          // Refresh CSRF token after logout
           await api.getCsrfToken()
           state.isAuthenticated = false
           state.user = null
 
-          // Disconnect from WebSocket
           if (state.webSocket) {
             if (state.currentRoom) {
               chatWs.leaveRoom(state.currentRoom)
@@ -293,6 +351,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           state.currentRoom = null
+
+          showToast('Goodbye', 'You have been logged out successfully.', 'info')
+
           return true
         }
         return false
@@ -314,7 +375,6 @@ document.addEventListener('DOMContentLoaded', () => {
           return response.data.token
         }
 
-        // Fallback for development/testing
         if (config.IS_DEV) {
           return 'dev_token'
         }
@@ -323,7 +383,6 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (error) {
         console.error('Failed to get JWT token:', error)
 
-        // Fallback for development/testing
         if (config.IS_DEV) {
           return 'dev_token'
         }
@@ -333,7 +392,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // WebSocket Chat Service
   const chatWs = {
     connect: async function () {
       if (state.webSocket) {
@@ -375,10 +433,8 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('WebSocket connection established')
       updateConnectionStatus(true)
 
-      // Update the room list UI from localStorage
       this.updateRoomListUI()
 
-      // If we have known rooms, add 'general' as a default if it doesn't exist
       if (!state.knownRooms.includes('general')) {
         state.knownRooms.push('general')
         saveToStorage()
@@ -393,12 +449,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data.type === 'chat_message') {
           this.addMessage(data)
+
+          if (
+            config.MESSAGE_SOUND &&
+            data.user_id !== state.user.id &&
+            data.username !== state.user.username
+          ) {
+            this.playMessageSound()
+          }
         } else if (data.type === 'room_joined') {
-          // Only update currentRoom if it's not already the same room
           if (state.currentRoom !== data.room_id) {
             state.currentRoom = data.room_id
 
-            // Add to known rooms if not already there
             if (!state.knownRooms.includes(data.room_id)) {
               state.knownRooms.push(data.room_id)
               saveToStorage()
@@ -407,22 +469,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
             this.updateRoomUI()
 
-            // Add a system message ONLY if we're joining a new room
-            this.addSystemMessage(data.room_id, `You joined ${data.room_id}`)
+            this.addSystemMessage(data.room_id, `You joined #${data.room_id}`)
 
-            // Initialize messages array for this room if not exists
             if (!state.messages[data.room_id]) {
               state.messages[data.room_id] = []
               saveToStorage()
             }
+
+            showToast(
+              'Room Joined',
+              `You joined #${data.room_id} successfully!`,
+              'success'
+            )
           }
         } else if (data.type === 'room_left') {
-          // Add a system message to the room before leaving
           if (state.currentRoom) {
             this.addSystemMessage(
               state.currentRoom,
-              `You left ${state.currentRoom}`
+              `You left #${state.currentRoom}`
             )
+
+            showToast('Room Left', `You left #${state.currentRoom}`, 'info')
           }
 
           state.currentRoom = null
@@ -430,21 +497,99 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (data.type === 'system' && data.message) {
           console.log('System message:', data.message)
 
-          // Add system message to current room if connected
           if (state.currentRoom) {
             this.addSystemMessage(state.currentRoom, data.message)
           }
+        } else if (data.type === 'typing') {
+          this.handleTypingIndicator(data)
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error)
       }
     },
 
+    handleTypingIndicator: function (data) {
+      if (!data.room_id || !data.username) return
+
+      const roomId = data.room_id
+      const username = data.username
+      const isTyping = data.typing === true
+
+      if (state.user && username === state.user.username) return
+
+      if (!state.typing[roomId]) {
+        state.typing[roomId] = {}
+      }
+
+      if (isTyping) {
+        state.typing[roomId][username] = Date.now()
+      } else {
+        delete state.typing[roomId][username]
+      }
+
+      this.updateTypingIndicator(roomId)
+    },
+
+    updateTypingIndicator: function (roomId) {
+      if (roomId !== state.currentRoom) return
+
+      const existingIndicator = document.getElementById('typing-indicator')
+      if (existingIndicator) {
+        existingIndicator.remove()
+      }
+
+      const typingUsers = state.typing[roomId]
+        ? Object.keys(state.typing[roomId])
+        : []
+
+      if (typingUsers.length > 0) {
+        const indicatorDiv = document.createElement('div')
+        indicatorDiv.id = 'typing-indicator'
+        indicatorDiv.className = 'message message-system'
+
+        let message = ''
+        if (typingUsers.length === 1) {
+          message = `${typingUsers[0]} is typing...`
+        } else if (typingUsers.length === 2) {
+          message = `${typingUsers[0]} and ${typingUsers[1]} are typing...`
+        } else {
+          message = `${typingUsers.length} people are typing...`
+        }
+
+        indicatorDiv.innerHTML = `
+          ${message}
+          <div class="typing-indicator">
+            <span></span><span></span><span></span>
+          </div>
+        `
+
+        elements.messages.appendChild(indicatorDiv)
+      }
+    },
+
+    playMessageSound: function () {
+      let audioElement = document.getElementById('message-sound')
+      if (!audioElement) {
+        audioElement = document.createElement('audio')
+        audioElement.id = 'message-sound'
+        audioElement.preload = 'auto'
+
+        // why doesn't this work :'(
+        audioElement.src =
+          'data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMA//uQwAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAADAAAGhgBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVWqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqr///////////////////////////////////////////8AAAA8TEFNRTMuOTlyAc0AAAAAAAAAABSAJAJAQgAAgAAAA+BnhyS7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uAxAAAFCD5YdTwAJcXlqT/OgAAAAIIIIBAMBgMBgMBgAAAABBv4ICAQCAQCB19gBAEAQfggCAIAgD/8EAQDAYD4Pg+D4YCAIAgCAAYD/w+D4Pgg//BAEAQf4IBgMB//BAEAQDhB/4PggCAIBgMB8EH/BAEH4PggIB//EHwQEA4QdwQDgYIAg+CAIAg//B//+D4Pg+CAgHCDuCAcDAQBAEA4Qf8EAQBAP//B8HwQEA//B8EAQf///B///wfB8HwfB8Hw//+CAYCAIBiTEFNRTMuOTkuNVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU='
+
+        document.body.appendChild(audioElement)
+      }
+
+      audioElement
+        .play()
+        .catch(e => console.error('Could not play notification sound:', e))
+    },
+
     handleClose: function (event) {
       console.log('WebSocket connection closed:', event.code, event.reason)
       updateConnectionStatus(false)
 
-      // Try to reconnect after a delay if we're still authenticated
       if (state.isAuthenticated) {
         setTimeout(() => this.connect(), 3000)
       }
@@ -483,19 +628,40 @@ document.addEventListener('DOMContentLoaded', () => {
       return true
     },
 
-    sendMessage: function(content) {
+    sendMessage: function (content) {
       if (!state.webSocket || !state.currentRoom || !content.trim()) {
-        return false;
+        return false
       }
 
       const message = {
         type: 'chat_message',
         room_id: state.currentRoom,
         content: content
-      };
+      }
 
-      state.webSocket.send(JSON.stringify(message));
-      return true;
+      state.webSocket.send(JSON.stringify(message))
+
+      state.messageCount++
+      document.querySelector('.user-stats .stat-value').textContent =
+        state.messageCount
+      saveToStorage()
+
+      return true
+    },
+
+    sendTypingIndicator: function (isTyping) {
+      if (!state.webSocket || !state.currentRoom) {
+        return false
+      }
+
+      const message = {
+        type: 'typing',
+        room_id: state.currentRoom,
+        typing: isTyping
+      }
+
+      state.webSocket.send(JSON.stringify(message))
+      return true
     },
 
     addSystemMessage: function (roomId, message) {
@@ -514,31 +680,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const roomId = data.room_id
       if (!roomId) return
 
-      // Add timestamp to message
-      data.timestamp = new Date().toISOString()
+      data.timestamp = data.timestamp || new Date().toISOString()
 
-      // Initialize messages array for this room if not exists
       if (!state.messages[roomId]) {
         state.messages[roomId] = []
       }
 
-      // Add message to state
       state.messages[roomId].push(data)
 
-      // Limit message history to 100 messages per room
-      if (state.messages[roomId].length > 100) {
-        state.messages[roomId] = state.messages[roomId].slice(-100)
+      if (state.messages[roomId].length > config.MSG_HISTORY_LIMIT) {
+        state.messages[roomId] = state.messages[roomId].slice(
+          -config.MSG_HISTORY_LIMIT
+        )
       }
 
-      // Save to localStorage
       saveToStorage()
 
-      // Update UI if this is the current room
       if (roomId === state.currentRoom) {
         this.renderMessages()
       }
 
-      // Update room list to show new message counts
       this.updateRoomListUI()
     },
 
@@ -548,7 +709,24 @@ document.addEventListener('DOMContentLoaded', () => {
       const messages = state.messages[state.currentRoom] || []
       elements.messages.innerHTML = ''
 
+      let currentDate = null
+
       messages.forEach(msg => {
+        if (msg.timestamp) {
+          const messageDate = new Date(msg.timestamp).toLocaleDateString()
+          if (messageDate !== currentDate) {
+            currentDate = messageDate
+
+            const dateDiv = document.createElement('div')
+            dateDiv.className = 'message-date-separator'
+            dateDiv.textContent =
+              messageDate === new Date().toLocaleDateString()
+                ? 'Today'
+                : messageDate
+            elements.messages.appendChild(dateDiv)
+          }
+        }
+
         const msgDiv = document.createElement('div')
 
         if (msg.username === 'System') {
@@ -556,13 +734,12 @@ document.addEventListener('DOMContentLoaded', () => {
           msgDiv.innerHTML = `${msg.message}`
         } else {
           const isCurrentUser =
-            msg.user_id === state.user.id ||
-            msg.username === state.user.username
+            msg.user_id === (state.user?.id || '') ||
+            msg.username === (state.user?.username || '')
           msgDiv.className = isCurrentUser
             ? 'message message-self'
             : 'message message-user'
 
-          // Format timestamp if available
           let timeString = ''
           if (msg.timestamp) {
             try {
@@ -577,7 +754,10 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           msgDiv.innerHTML = `
-            <div class="message-header">${msg.username} ${timeString}</div>
+            <div class="message-header">
+              <span>${msg.username}</span>
+              ${timeString}
+            </div>
             <div class="message-content">${msg.message}</div>
           `
         }
@@ -585,7 +765,8 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.messages.appendChild(msgDiv)
       })
 
-      // Scroll to bottom
+      this.updateTypingIndicator(state.currentRoom)
+
       elements.messages.scrollTop = elements.messages.scrollHeight
     },
 
@@ -594,6 +775,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.currentRoomName.textContent = state.currentRoom
         elements.messageInput.disabled = false
         elements.sendBtn.disabled = false
+        elements.messageInput.focus()
       } else {
         elements.currentRoomName.textContent = 'No Room'
         elements.messageInput.disabled = true
@@ -601,20 +783,17 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.messages.innerHTML = ''
       }
 
-      // Update active room in room list
       this.updateRoomListUI()
     },
 
     updateRoomListUI: function () {
       elements.roomList.innerHTML = ''
 
-      // Always include general room if not already in the list
       if (!state.knownRooms.includes('general')) {
         state.knownRooms.push('general')
         saveToStorage()
       }
 
-      // Display known rooms from localStorage
       state.knownRooms.forEach(roomId => {
         const li = document.createElement('li')
         li.className = 'room-item'
@@ -624,14 +803,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         li.dataset.roomId = roomId
 
-        // Get message count if available
         const messageCount = state.messages[roomId]
           ? state.messages[roomId].length
           : 0
 
         li.innerHTML = `
           <span>${roomId}</span>
-          <span class="message-count">${messageCount} msg</span>
+          <span class="message-count">${messageCount}</span>
         `
 
         li.addEventListener('click', () => {
@@ -647,20 +825,32 @@ document.addEventListener('DOMContentLoaded', () => {
       })
     },
 
-    // Clear chat history
     clearHistory: function () {
       if (confirm('This will clear all chat history. Continue?')) {
         state.messages = {}
         saveToStorage()
         this.updateRoomListUI()
         this.renderMessages()
+        showToast(
+          'History Cleared',
+          'All chat history has been cleared.',
+          'info'
+        )
       }
+    },
+
+    animateMessage: function (messageElement) {
+      messageElement.style.opacity = '0'
+      messageElement.style.transform = 'translateY(20px)'
+
+      setTimeout(() => {
+        messageElement.style.opacity = '1'
+        messageElement.style.transform = 'translateY(0)'
+      }, 10)
     }
   }
 
-  // Update UI based on state
   function updateUI () {
-    // Handle loading state
     if (state.loading) {
       elements.loadingView.classList.remove('hidden')
       elements.authView.classList.add('hidden')
@@ -670,29 +860,26 @@ document.addEventListener('DOMContentLoaded', () => {
       elements.loadingView.classList.add('hidden')
     }
 
-    // Update UI based on authentication status
     if (state.isAuthenticated && state.user) {
       elements.chatView.classList.remove('hidden')
       elements.authView.classList.add('hidden')
 
-      // Update user info
       elements.currentUser.textContent = state.user.username
 
-      // Set avatar letter
       const avatarElement = document.querySelector('.user-avatar-large')
       if (avatarElement) {
         avatarElement.textContent = state.user.username.charAt(0).toUpperCase()
       }
 
-      // Initialize WebSocket if not already connected
+      document.querySelector('.user-stats .stat-value').textContent =
+        state.messageCount
+
       if (!state.webSocket) {
         chatWs.connect()
       }
 
-      // Update room list from localStorage
       chatWs.updateRoomListUI()
 
-      // Render messages if in a room
       if (state.currentRoom) {
         chatWs.renderMessages()
       }
@@ -701,17 +888,16 @@ document.addEventListener('DOMContentLoaded', () => {
       elements.chatView.classList.add('hidden')
     }
 
-    // Display any errors
     if (state.error) {
       elements.loginError.textContent = state.error
+      elements.loginError.style.display = 'block'
     } else {
       elements.loginError.textContent = ''
+      elements.loginError.style.display = 'none'
     }
   }
 
-  // Set up event listeners
   function setupEventListeners () {
-    // Login button
     elements.loginBtn.addEventListener('click', async () => {
       const username = elements.username.value
       const password = elements.password.value
@@ -727,24 +913,20 @@ document.addEventListener('DOMContentLoaded', () => {
       showLoading(false)
 
       if (success) {
-        // Clear form
         elements.username.value = ''
         elements.password.value = ''
       }
     })
 
-    // Logout button
     elements.logoutBtn.addEventListener('click', async () => {
       await auth.logout()
       updateUI()
     })
 
-    // Create/Join room button
     elements.createRoomBtn.addEventListener('click', () => {
       const roomId = elements.newRoomId.value.trim()
       if (!roomId) return
 
-      // Add to known rooms if it's not already there
       if (!state.knownRooms.includes(roomId)) {
         state.knownRooms.push(roomId)
         saveToStorage()
@@ -759,52 +941,120 @@ document.addEventListener('DOMContentLoaded', () => {
       elements.newRoomId.value = ''
     })
 
-    // Leave room button
     elements.leaveRoomBtn.addEventListener('click', () => {
       if (state.currentRoom) {
         chatWs.leaveRoom(state.currentRoom)
       }
     })
 
-    // Send message button
     elements.sendBtn.addEventListener('click', () => {
       const content = elements.messageInput.value.trim()
       if (content && chatWs.sendMessage(content)) {
         elements.messageInput.value = ''
+
+        chatWs.sendTypingIndicator(false)
       }
     })
 
-    // Send on Enter key
     elements.messageInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         elements.sendBtn.click()
       }
     })
 
-    // Login on Enter key
     elements.password.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         elements.loginBtn.click()
       }
     })
 
-    // Join room on Enter key
     elements.newRoomId.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         elements.createRoomBtn.click()
       }
     })
 
-    // Add CRT effect
-    const crtEffect = document.createElement('div')
-    crtEffect.className = 'crt-effect'
-    document.body.appendChild(crtEffect)
+    let typingTimer
+    elements.messageInput.addEventListener('input', () => {
+      chatWs.sendTypingIndicator(true)
+
+      clearTimeout(typingTimer)
+
+      typingTimer = setTimeout(() => {
+        chatWs.sendTypingIndicator(false)
+      }, 2000)
+    })
+
+    elements.messageInput.addEventListener('focus', () => {
+      elements.chatView.classList.add('input-focused')
+    })
+
+    elements.messageInput.addEventListener('blur', () => {
+      elements.chatView.classList.remove('input-focused')
+    })
+
+    createDarkModeToggle()
+
+    createSoundToggle()
   }
 
-  // Load data from localStorage
+  function createDarkModeToggle () {
+    const toggle = document.createElement('button')
+    toggle.className = 'theme-toggle'
+    toggle.innerHTML = '🌙'
+    toggle.title = 'Toggle Dark/Light Mode'
+
+    toggle.addEventListener('click', () => {
+      document.body.classList.toggle('light-theme')
+      toggle.innerHTML = document.body.classList.contains('light-theme')
+        ? '☀️'
+        : '🌙'
+
+      localStorage.setItem(
+        'swecc_theme',
+        document.body.classList.contains('light-theme') ? 'light' : 'dark'
+      )
+    })
+
+    document.body.appendChild(toggle)
+
+    if (localStorage.getItem('swecc_theme') === 'light') {
+      document.body.classList.add('light-theme')
+      toggle.innerHTML = '☀️'
+    }
+  }
+
+  function createSoundToggle () {
+    const toggle = document.createElement('button')
+    toggle.className = 'sound-toggle'
+    toggle.innerHTML = config.MESSAGE_SOUND ? '🔊' : '🔇'
+    toggle.title = 'Toggle Sound'
+
+    toggle.addEventListener('click', () => {
+      config.MESSAGE_SOUND = !config.MESSAGE_SOUND
+      toggle.innerHTML = config.MESSAGE_SOUND ? '🔊' : '🔇'
+
+      localStorage.setItem('swecc_sound', config.MESSAGE_SOUND ? 'on' : 'off')
+
+      showToast(
+        'Sound',
+        config.MESSAGE_SOUND
+          ? 'Notification sounds enabled'
+          : 'Notification sounds disabled',
+        'info'
+      )
+    })
+
+    document.body.appendChild(toggle)
+
+    if (localStorage.getItem('swecc_sound') === 'off') {
+      config.MESSAGE_SOUND = false
+      toggle.innerHTML = '🔇'
+    }
+  }
+
   loadFromStorage()
 
-  // Initialize app
   setupEventListeners()
   auth.initialize()
 })

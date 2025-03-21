@@ -3,35 +3,75 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Retro Chat</title>
+    <title>SWECC Rooms | Software Engineering Career Club</title>
     <link rel="stylesheet" href="css/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M20 50 L50 20 L80 50 L50 80 Z' fill='%238bc34a'/%3E%3C/svg%3E"
+    />
   </head>
   <body>
     <div class="container">
       <!-- Auth View -->
       <div id="auth-view" class="view">
         <div class="retro-card">
-          <h1>Retro Chat</h1>
+          <svg
+            class="logo"
+            width="200"
+            height="80"
+            viewBox="0 0 600 240"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <text
+              x="50"
+              y="120"
+              fill="#8bc34a"
+              font-family="Inter, sans-serif"
+              font-weight="700"
+              font-size="100"
+            >
+              swe
+            </text>
+            <text
+              x="280"
+              y="120"
+              fill="#8bc34a"
+              font-family="Inter, sans-serif"
+              font-weight="700"
+              font-size="100"
+            >
+              &lt;&lt;
+            </text>
+          </svg>
+          <h1 class="logo-text">SWECC Rooms</h1>
+          <p class="logo-subtitle">Software Engineering Career Club</p>
           <div id="login-error" class="error-message"></div>
           <div class="form-group">
-            <label for="username">Username:</label>
+            <label for="username">Username</label>
             <input
               type="text"
               id="username"
               class="retro-input"
-              placeholder="Enter username"
+              placeholder="Enter your username"
             />
           </div>
           <div class="form-group">
-            <label for="password">Password:</label>
+            <label for="password">Password</label>
             <input
               type="password"
               id="password"
               class="retro-input"
-              placeholder="Enter password"
+              placeholder="Enter your password"
             />
           </div>
-          <button id="login-btn" class="retro-button">Login</button>
+          <button id="login-btn" class="retro-button">Sign In</button>
         </div>
       </div>
 
@@ -39,7 +79,7 @@
       <div id="loading-view" class="view hidden">
         <div class="retro-card">
           <div class="loading-spinner"></div>
-          <p>Connecting...</p>
+          <p>Connecting to SWECC Rooms...</p>
         </div>
       </div>
 
@@ -47,16 +87,20 @@
       <div id="chat-view" class="view hidden">
         <div class="chat-container">
           <div class="rooms-panel">
-            <h2>Rooms</h2>
+            <div class="panel-header">
+              <h2>Rooms</h2>
+            </div>
             <ul id="room-list"></ul>
             <div class="join-room">
               <input
                 type="text"
                 id="new-room-id"
                 class="retro-input"
-                placeholder="Room name"
+                placeholder="Create or join room"
               />
-              <button id="create-room-btn" class="retro-button">Join</button>
+              <button id="create-room-btn" class="retro-button small">
+                Join
+              </button>
             </div>
           </div>
 
@@ -75,7 +119,7 @@
                 type="text"
                 id="message-input"
                 class="retro-input"
-                placeholder="Type message..."
+                placeholder="Type a message..."
                 disabled
               />
               <button id="send-btn" class="retro-button" disabled>Send</button>
@@ -83,13 +127,29 @@
           </div>
 
           <div class="users-panel">
-            <h2>You</h2>
+            <div class="panel-header">
+              <h2>Profile</h2>
+            </div>
             <div class="user-info">
               <div class="user-avatar-large">?</div>
               <div id="current-user">Not logged in</div>
+              <div class="user-role">Member</div>
+
+              <div class="user-stats">
+                <div class="stat-item">
+                  <span>Status</span>
+                  <span id="connection-status-text" class="stat-value"
+                    >Offline</span
+                  >
+                </div>
+                <div class="stat-item">
+                  <span>Messages Sent</span>
+                  <span class="stat-value">0</span>
+                </div>
+              </div>
             </div>
             <div class="user-actions">
-              <button id="logout-btn" class="retro-button">Logout</button>
+              <button id="logout-btn" class="retro-button">Sign Out</button>
             </div>
             <div class="connection-status">
               <div
@@ -97,6 +157,65 @@
                 class="status-indicator offline"
               ></div>
               <span id="connection-status">Offline</span>
+
+              <!-- About Info Icon (New) -->
+              <label
+                for="about-modal-toggle"
+                class="about-info-icon"
+                title="About SWECC Rooms"
+                >ℹ️</label
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- About Modal (New) -->
+      <input type="checkbox" id="about-modal-toggle" class="modal-toggle" />
+      <div class="about-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>About SWECC Rooms</h2>
+            <label for="about-modal-toggle" class="modal-close">&times;</label>
+          </div>
+          <div class="modal-body">
+            <div class="about-section">
+              <h3>What is SWECC Rooms?</h3>
+              <p>
+                SWECC Rooms is a real-time chat application developed by the
+                Software Engineering Career Club. It allows members to
+                communicate in topic-based chat rooms.
+              </p>
+            </div>
+
+            <div class="about-section">
+              <h3>How It Works</h3>
+              <h4><i>Real-Time Communication</i></h4>
+              <p>
+                SWECC Rooms uses WebSockets to provide real-time messaging. When
+                you send a message, it's broadcasted to all other users
+                currently in the same room, but nobody else.
+              </p>
+
+              <h4><i>Data Persistence</i></h4>
+              <p>
+                Your chat history and room memberships are saved in your
+                browser's localStorage. This means you can close the app and
+                return later to find your conversations still available.
+              </p>
+            </div>
+
+            <div class="about-section">
+              <h3>Getting Started</h3>
+              <ol>
+                <li>Sign in with your SWECC credentials</li>
+                <li>Join an existing room or create a new one</li>
+                <li>Start chatting</li>
+              </ol>
+            </div>
+
+            <div class="about-footer">
+              <p>Made with hate by the Software Engineering Career Club</p>
             </div>
           </div>
         </div>
