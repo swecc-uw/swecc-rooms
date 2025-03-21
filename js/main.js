@@ -642,7 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
       state.webSocket.send(JSON.stringify(message))
 
       state.messageCount++
-      document.querySelector('.user-stats .stat-value').textContent =
+      document.querySelector('.user-stats .stat-value #messages-sent').textContent =
         state.messageCount
       saveToStorage()
 
