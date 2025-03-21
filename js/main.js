@@ -642,7 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
       state.webSocket.send(JSON.stringify(message))
 
       state.messageCount++
-      document.getElementById('messages-sent') = state.messageCount
+      document.getElementById('messages-sent').textContent = state.messageCount
       saveToStorage()
 
       return true
@@ -870,8 +870,7 @@ document.addEventListener('DOMContentLoaded', () => {
         avatarElement.textContent = state.user.username.charAt(0).toUpperCase()
       }
 
-      document.querySelector('.user-stats .stat-value').textContent =
-        state.messageCount
+      document.getElementById('messages-sent').textContent = state.messageCount
 
       if (!state.webSocket) {
         chatWs.connect()
