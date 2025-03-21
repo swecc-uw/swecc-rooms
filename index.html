@@ -1,107 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auth Template</title>
-    <link rel="stylesheet" href="css/style.css">
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Retro Chat</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
     <div class="container">
-        <header>
-            <h1>Auth Template</h1>
-            <div id="auth-status">
-                <p id="loading-message">Loading...</p>
-                <div id="logged-out-view" class="hidden">
-                    <button id="show-login-btn">Login</button>
-                    <button id="show-register-btn">Register</button>
-                </div>
-                <div id="logged-in-view" class="hidden">
-                    <p>Welcome, <span id="username"></span>!</p>
-                    <div id="user-info">
-                        <p id="admin-badge" class="hidden">Admin</p>
-                        <p id="verified-badge" class="hidden">Verified</p>
-                    </div>
-                    <button id="logout-btn">Logout</button>
-                </div>
-            </div>
-        </header>
+      <!-- Auth View -->
+      <div id="auth-view" class="view">
+        <div class="retro-card">
+          <h1>Retro Chat</h1>
+          <div id="login-error" class="error-message"></div>
+          <div class="form-group">
+            <label for="username">Username:</label>
+            <input
+              type="text"
+              id="username"
+              class="retro-input"
+              placeholder="Enter username"
+            />
+          </div>
+          <div class="form-group">
+            <label for="password">Password:</label>
+            <input
+              type="password"
+              id="password"
+              class="retro-input"
+              placeholder="Enter password"
+            />
+          </div>
+          <button id="login-btn" class="retro-button">Login</button>
+        </div>
+      </div>
 
-        <main>
-            <div id="login-form" class="auth-form" class="hidden">
-                <h2>Login</h2>
-                <form id="login">
-                    <div class="form-group">
-                        <label for="login-username">Username</label>
-                        <input type="text" id="login-username" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="login-password">Password</label>
-                        <input type="password" id="login-password" required>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit">Login</button>
-                        <button type="button" class="cancel-btn">Cancel</button>
-                    </div>
-                    <p id="login-error" class="error-message"></p>
-                </form>
-            </div>
+      <!-- Loading View -->
+      <div id="loading-view" class="view hidden">
+        <div class="retro-card">
+          <div class="loading-spinner"></div>
+          <p>Connecting...</p>
+        </div>
+      </div>
 
-            <div id="register-form" class="auth-form" class="hidden">
-                <h2>Register</h2>
-                <form id="register">
-                    <div class="form-group">
-                        <label for="register-first-name">First Name</label>
-                        <input type="text" id="register-first-name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="register-last-name">Last Name</label>
-                        <input type="text" id="register-last-name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="register-username">Username</label>
-                        <input type="text" id="register-username" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="register-email">Email</label>
-                        <input type="email" id="register-email" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="register-password">Password</label>
-                        <input type="password" id="register-password" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="register-discord">Discord Username</label>
-                        <input type="text" id="register-discord" required>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit">Register</button>
-                        <button type="button" class="cancel-btn">Cancel</button>
-                    </div>
-                    <p id="register-error" class="error-message"></p>
-                </form>
+      <!-- Chat View -->
+      <div id="chat-view" class="view hidden">
+        <div class="chat-container">
+          <div class="rooms-panel">
+            <h2>Rooms</h2>
+            <ul id="room-list"></ul>
+            <div class="join-room">
+              <input
+                type="text"
+                id="new-room-id"
+                class="retro-input"
+                placeholder="Room name"
+              />
+              <button id="create-room-btn" class="retro-button">Join</button>
+            </div>
+          </div>
+
+          <div class="chat-panel">
+            <div class="chat-header">
+              <h2 id="current-room-name">No Room</h2>
+              <button id="leave-room-btn" class="retro-button small">
+                Leave
+              </button>
             </div>
 
-            <div id="content" class="hidden">
-                <h2>Protected Content</h2>
-                <p>This content is only visible to authenticated users.</p>
-                
-                <div id="admin-content" class="hidden">
-                    <h3>Admin Section</h3>
-                    <p>This section is only visible to administrators.</p>
-                </div>
-                
-                <div id="verified-content" class="hidden">
-                    <h3>Verified User Section</h3>
-                    <p>This section is only visible to verified users.</p>
-                </div>
+            <div id="messages" class="messages"></div>
+
+            <div class="chat-input">
+              <input
+                type="text"
+                id="message-input"
+                class="retro-input"
+                placeholder="Type message..."
+                disabled
+              />
+              <button id="send-btn" class="retro-button" disabled>Send</button>
             </div>
-        </main>
+          </div>
+
+          <div class="users-panel">
+            <h2>You</h2>
+            <div class="user-info">
+              <div class="user-avatar-large">?</div>
+              <div id="current-user">Not logged in</div>
+            </div>
+            <div class="user-actions">
+              <button id="logout-btn" class="retro-button">Logout</button>
+            </div>
+            <div class="connection-status">
+              <div
+                id="connection-indicator"
+                class="status-indicator offline"
+              ></div>
+              <span id="connection-status">Offline</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <script src="js/constants.js"></script>
-    <script src="js/utils.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/auth.js"></script>
+
     <script src="js/main.js"></script>
-</body>
+  </body>
 </html>
